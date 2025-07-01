@@ -5,7 +5,7 @@ pipeline {
     CREDS = credentials('dockerhub-credentials')
     DOCKERHUB_USER = "${CREDS_USR}"
     TAG = ''
-    COMPOSE_FILE = 'infra/docker-compose.yml'
+    COMPOSE_FILE = 'infra/docker-compose.yaml'
   }
 
   stages {
@@ -20,11 +20,11 @@ pipeline {
         script {
           def tag = sh(script: "git describe --tags --exact-match || echo ''", returnStdout: true).trim()
           if (!tag) {
-            error("🚫 Không tìm thấy Git tag hợp lệ cho build.")
+            error("🚫 Not found tag.")
           }
           TAG = tag
           env.TAG = TAG
-          echo "📌 Sử dụng tag: ${TAG}"
+          echo "📌Use tag: ${TAG}"
         }
       }
     }
