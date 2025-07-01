@@ -1,0 +1,342 @@
+version: "3.9"
+
+services:
+  redis:
+    container_name: redis_container
+    image: redis:alpine
+    # restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --loglevel warning
+    volumes:
+      - ./docker-volume/cache:/data
+
+  mongodb:
+    container_name: mongodb_container
+    image: mongo
+    # restart: always
+    ports:
+      - 27017:27017
+    volumes:
+      - ./docker-volume/data:/data/db
+
+  mysql:
+    container_name: mysql_container
+    image: mysql
+    # command: --default-authentication-plugin=mysql_native_password
+    # restart: always
+    environment:
+      - MYSQL_USER=food-delivery
+      - MYSQL_ROOT_PASSWORD=food-delivery
+      - MYSQL_PASSWORD=food-delivery
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./docker-volume/mysql:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  postgres:
+    container_name: postgres_container
+    image: postgres
+    restart: always
+    # user: postgres
+    environment:
+      - PGUSER=food-delivery
+      - POSTGRES_USER=food-delivery
+      - POSTGRES_PASSWORD=food-delivery
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker-volume/postgres:/var/lib/postgresql
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql
+
+  rabbitmq:
+    container_name: rabbitmq_container
+    image: rabbitmq:3.13-rc-management-alpine
+    # restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=pass
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+  elasticsearch:
+    container_name: elasticsearch_container
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    # restart: always
+    environment:
+      ES_JAVA_OPTS: -Xmx1g -Xms1g
+      bootstrap.memory_lock: "true"
+      discovery.type: single-node
+      network.host: 0.0.0.0
+      transport.host: 127.0.0.1
+      http.host: 0.0.0.0
+      xpack.security.enabled: "false"
+      xpack.security.authc.api_key.enabled: "true"
+      xpack.monitoring.collection.enabled: "true"
+      xpack.security.enrollment.enabled: "true"
+      xpack.security.authc.token.enabled: "true"
+      ELASTIC_PASSWORD: admin1234
+    ports:
+      - 9200:9200
+      - 9300:9300
+    volumes:
+      - ./docker-volume/elasticsearch-data:/urs/share/elasticsearch/data
+    networks:
+      - elastic
+
+  api-gateway:
+    container_name: api_gateway_container
+    build:
+      context: ../services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    env_file: ../services/api-gateway/.env
+    environment:
+      - NODE_ENV=development
+      - JWT_SECRET=this-is-my-secret@@@
+      - PORT=5000
+      - JWT_EXPIRES=1d
+      - AUTH_SERVICE_HOST=auth-service_container
+      - AUTH_SERVICE_PORT=5001
+      - USER_SERVICE_HOST=user-service_container
+      - USER_SERVICE_PORT=5002
+      - NOTIFICATION_SERVICE_HOST=notification-service_container
+      - NOTIFICATION_SERVICE_PORT=5003
+      - RESTAURANT_SERVICE_HOST=restaurant-service_container
+      - RESTAURANT_SERVICE_PORT=5004
+      - ORDER_SERVICE_HOST=order-service_container
+      - ORDER_SERVICE_PORT=5005
+      - PAYMENT_SERVICE_HOST=payment-service_container
+      - PAYMENT_SERVICE_PORT=5006
+      - DELIVERY_SERVICE_HOST=delivery-service_container
+      - DELIVERY_SERVICE_PORT=5007
+      - CART_SERVICE_HOST=cart-service_container
+      - CART_SERVICE_PORT=5008
+      - REVIEW_SERVICE_HOST=review-service_container
+      - REVIEW_SERVICE_PORT=5009
+    depends_on:
+      - rabbitmq
+
+  auth:
+    container_name: auth_service_container
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    env_file: ../services/auth-service/.env
+    environment:
+      - NODE_ENV=development
+      - AUTH_SERVICE_HOST=auth_service_container
+      - AUTH_SERVICE_PORT=5001
+      - DB_USERNAME=food-delivery
+      - DB_PASSWORD=food-delivery
+      - DB_NAME=auth
+      - DB_HOST=mysql_container
+      - DB_PORT=3306
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - PORT=5001
+      - JWT_EXPIRES=1d
+      - JWT_SECRET=this-is-my-secret@@@
+      - CLIENT_URL=localhost:5000
+
+    depends_on:
+      - mysql
+      - rabbitmq
+
+  user:
+    container_name: user_service_container
+    build:
+      context: ../services/user-service
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5002"
+    env_file: ../services/user-service/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=5002
+      - USER_SERVICE_HOST=user_service_container
+      - USER_SERVICE_PORT=5002
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - DB_URL=mongodb://mongodb_container:27017/user
+      - REDIS_HOST=redis_container
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+      - mongodb
+      - rabbitmq
+
+  notification:
+    container_name: notification_service_container
+    build:
+      context: ../services/notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "5003:5003"
+    env_file: ../services/notification-service/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=5003
+      - NOTIFICATION_SERVICE_HOST=notification_service_container
+      - NOTIFICATION_SERVICE_PORT=5003
+      - DB_USERNAME=food-delivery
+      - DB_PASSWORD=food-delivery
+      - DB_NAME=notifications
+      - DB_HOST=mysql_container
+      - DB_PORT=3306
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - EMAIL_USER=a3bcdcfec65900
+      - EMAIL_PASS=eca599876f7825
+      - EMAIL_HOST=sandbox.smtp.mailtrap.io
+      - CLIENT_URL=localhost:5000
+      - REDIS_HOST=redis_container
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+      - mysql
+      - rabbitmq
+
+  restaurant:
+    container_name: restaurant_service_container
+    build:
+      context: ../services/restaurant-service
+      dockerfile: Dockerfile
+    ports:
+      - "5004:5004"
+    env_file: ../services/restaurant-service/.env
+    environment:
+      - NODE_ENV=development
+      - RESTAURANT_SERVICE_HOST=restaurant_service_container
+      - RESTAURANT_SERVICE_PORT=5004
+      - DB_USERNAME=food-delivery
+      - DB_PASSWORD=food-delivery
+      - DB_NAME=restaurant
+      - DB_HOST=postgres_container
+      - DB_PORT=5432
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - PORT=5004
+      - JWT_EXPIRES=1d
+      - JWT_SECRET=this-is-my-secret@@@
+      - CLIENT_URL=localhost:5000
+      - ELASTICSEARCH_URL=http://elasticsearch_container:9200
+      - REDIS_HOST=redis_container
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+      - postgres
+      - rabbitmq
+  order:
+    container_name: order_service_container
+    build:
+      context: ../services/order-service
+      dockerfile: Dockerfile
+    ports:
+      - "5005:5005"
+    env_file: ../services/order-service/.env
+    environment:
+      - NODE_ENV=development
+      - ORDER_SERVICE_HOST=order_service_container
+      - ORDER_SERVICE_PORT=5005
+      - DB_USERNAME=food-delivery
+      - DB_PASSWORD=food-delivery
+      - DB_NAME=orders
+      - DB_HOST=mysql_container
+      - DB_PORT=3306
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - PORT=5005
+      - CLIENT_URL=localhost:5000
+    depends_on:
+      - mysql
+      - rabbitmq
+  payment:
+    container_name: payment_service_container
+    build:
+      context: ../services/payment-service
+      dockerfile: Dockerfile
+    ports:
+      - "5006:5006"
+    env_file: ../services/payment-service/.env
+    environment:
+      - NODE_ENV=development
+      - PAYMENT_SERVICE_HOST=payment_service_container
+      - PAYMENT_SERVICE_PORT=5006
+      - DB_USERNAME=food-delivery
+      - DB_PASSWORD=food-delivery
+      - DB_NAME=payment
+      - DB_HOST=postgres_container
+      - DB_PORT=5432
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - PORT=5006
+      - CLIENT_URL=localhost:5000
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  delivery:
+    container_name: delivery_service_container
+    build:
+      context: ../services/delivery-service
+      dockerfile: Dockerfile
+    ports:
+      - "5007:5007"
+    env_file: ../services/delivery-service/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=5007
+      - DELIVERY_SERVICE_HOST=delivery_service_container
+      - DELIVERY_SERVICE_PORT=5007
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - DB_URL=mongodb://mongodb_container:27017/delivery
+    depends_on:
+      - mongodb
+      - rabbitmq
+
+
+  cart:
+    container_name: cart_service_container
+    build:
+      context: ../services/cart-service
+      dockerfile: Dockerfile
+    ports:
+      - "5008:5008"
+    env_file: ../services/cart-service/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=5008
+      - CART_SERVICE_HOST=cart_service_container
+      - CART_SERVICE_PORT=5008
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - REDIS_HOST=redis_container
+      - REDIS_PORT=6379
+    depends_on:
+      - rabbitmq
+
+  review:
+    container_name: review_service_container
+    build:
+      context: ../services/review-service
+      dockerfile: Dockerfile
+    ports:
+      - "5009:5009"
+    env_file: ../services/review-service/.env
+    environment:
+      - NODE_ENV=development
+      - REVIEW_SERVICE_HOST=review_service_container
+      - REVIEW_SERVICE_PORT=5009
+      - DB_USERNAME=food-delivery
+      - DB_PASSWORD=food-delivery
+      - DB_NAME=review
+      - DB_HOST=postgres_container
+      - DB_PORT=5432
+      - RABBITMQ_URL=amqp://user:pass@rabbitmq_container:5672
+      - PORT=5009
+      - CLIENT_URL=localhost:5000
+    depends_on:
+      - postgres
+      - rabbitmq
+
+networks:
+  elastic:
+    name: elastic

@@ -1,0 +1,6 @@
+node_modules
+dist
+Dockerfile
+.env
+*.log
+npm-debug.log
