@@ -1,10 +1,14 @@
 pipeline {
   agent any
 
+  parameters {
+    booleanParam(name: 'FORCE_ALL', defaultValue: false, description: 'Build tất cả service bất kể có thay đổi hay không')
+  }
+
   environment {
-    CREDS = credentials('dockerhub-credentials')
+    CREDS = credentials('dockerhub-creds')
     DOCKERHUB_USER = "${CREDS_USR}"
-    TAG = '' // GitHub tag
+    TAG = ''
   }
 
   stages {
@@ -17,52 +21,73 @@ pipeline {
     stage('Detect Git Tag & Changed Services') {
       steps {
         script {
-          TAG = sh(script: "git describe --tags --exact-match || echo ''", returnStdout: true).trim()
-          if (!TAG) {
-            error("❌ Không phải Git tag. Dừng pipeline.")
+          // 1. Lấy tag hiện tại
+          def tag = sh(script: "git describe --tags --exact-match || echo ''", returnStdout: true).trim()
+          if (!tag) {
+            error("⛔ Không phải Git tag. Dừng pipeline.")
           }
-          env.TAG = TAG
+          env.TAG = tag
+          echo "🏷️ Git tag hiện tại: ${tag}"
 
-          def lastTag = sh(script: "git describe --tags --abbrev=0 HEAD^", returnStdout: true).trim()
-          def changed = sh(script: "git diff --name-only ${lastTag}..HEAD", returnStdout: true).trim()
-          def list = changed.split("\n")
-                            .findAll { it.startsWith("services/") }
-                            .collect { it.split("/")[1] }
-                            .unique()
-          if (list.isEmpty()) {
-            echo "✅ Không có service nào thay đổi. Dừng pipeline."
-            currentBuild.result = 'SUCCESS'
+          // 2. Nếu FORCE_ALL = true → build toàn bộ service
+          if (params.FORCE_ALL) {
+            def allSvcs = sh(script: 'ls services', returnStdout: true).trim().split("\n")
+            env.CHANGED_SERVICES = allSvcs.join(',')
+            echo "🚨 FORCE_ALL = true → build tất cả: ${env.CHANGED_SERVICES}"
             return
           }
-          env.CHANGED_SERVICES = list.join(",")
-          echo "📦 Sẽ build các service thay đổi: ${env.CHANGED_SERVICES}"
+
+          // 3. Tìm Git tag trước đó
+          def lastTag = sh(script: "git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ''", returnStdout: true).trim()
+          def changedSvcs = []
+
+          if (lastTag) {
+            echo "🔍 So sánh với tag trước đó: ${lastTag}"
+            def diff = sh(script: "git diff --name-only ${lastTag}..HEAD", returnStdout: true).trim().split("\n")
+            changedSvcs = diff.findAll { it.startsWith('services/') }
+                              .collect { it.split('/')[1] }
+                              .unique()
+          } else {
+            echo "🆕 Không tìm thấy tag trước đó → lần đầu chạy. Build toàn bộ service."
+            changedSvcs = sh(script: 'ls services', returnStdout: true).trim().split("\n")
+          }
+
+          if (changedSvcs.isEmpty()) {
+            echo "✅ Không có service nào thay đổi. Dừng pipeline."
+            currentBuild.result = 'SUCCESS'
+            error('Skip build')
+          }
+
+          env.CHANGED_SERVICES = changedSvcs.join(',')
+          echo "📦 Danh sách service sẽ build: ${env.CHANGED_SERVICES}"
         }
       }
     }
 
-    stage('Generate Minimal Compose File') {
+    stage('Generate Compose File Cho Services Thay Đổi') {
       steps {
         script {
-          def changed = env.CHANGED_SERVICES.split(',')
-          def composeLines = [ 'version: "3.8"', '', 'services:' ]
-          for (svc in changed) {
-            composeLines += """
+          def svcs = env.CHANGED_SERVICES.split(',')
+          def compose = ['version: "3.8"', '', 'services:']
+          for (svc in svcs) {
+            compose += """
   ${svc}:
     build: ./services/${svc}
     image: ${DOCKERHUB_USER}/${svc}:${TAG}
 """
           }
-          writeFile file: 'docker-compose.partial.yml', text: composeLines.join('\n')
+          writeFile file: 'docker-compose.partial.yml', text: compose.join('\n')
+          sh 'cat docker-compose.partial.yml'
         }
       }
     }
 
-    stage('Build & Push Changed Images') {
+    stage('Build & Push Docker Images') {
       steps {
         sh """
           echo $CREDS_PSW | docker login -u $DOCKERHUB_USER --password-stdin
-          TAG=${TAG} docker compose -f docker-compose.partial.yml build
-          TAG=${TAG} docker compose -f docker-compose.partial.yml push
+          TAG=${TAG} docker-compose -f docker-compose.partial.yml build
+          TAG=${TAG} docker-compose -f docker-compose.partial.yml push
           docker logout
         """
       }
