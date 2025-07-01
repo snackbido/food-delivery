@@ -6,7 +6,7 @@ pipeline {
   }
 
   environment {
-    CREDS = credentials('dockerhub-creds')
+    CREDS = credentials('dockerhub-credentials')
     DOCKERHUB_USER = "${CREDS_USR}"
     TAG = ''
   }
