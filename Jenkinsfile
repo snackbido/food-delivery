@@ -35,8 +35,8 @@ pipeline {
           dir("${env.WORKSPACE}") {
             sh """
               echo $CREDS_PSW | docker login -u $DOCKERHUB_USER --password-stdin
-              TAG=${TAG} docker-compose -f ${COMPOSE_FILE} build
-              TAG=${TAG} docker-compose -f ${COMPOSE_FILE} push
+              TAG=${TAG} docker compose -f ${COMPOSE_FILE} build
+              TAG=${TAG} docker compose -f ${COMPOSE_FILE} push
               docker logout
             """
           }
