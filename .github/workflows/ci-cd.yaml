@@ -1,4 +1,4 @@
-name: CI/CD - Docker build for changed services
+name: CI/CD - Build changed Docker services
 
 on:
   push:
@@ -8,279 +8,71 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
     outputs:
-      api: ${{ steps.filter.outputs.api }}
-      auth: ${{ steps.filter.outputs.auth }}
-      cart: ${{ steps.filter.outputs.cart }}
-      delivery: ${{ steps.filter.outputs.delivery }}
-      noti: ${{ steps.filter.outputs.noti }}
-      order: ${{ steps.filter.outputs.order }}
-      payment: ${{ steps.filter.outputs.payment }}
-      restaurant: ${{ steps.filter.outputs.restaurant }}
-      review: ${{ steps.filter.outputs.review }}
-      user: ${{ steps.filter.outputs.user }}
-
+      changed: ${{ steps.changed.outputs.matrix }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Detect changed services
-        id: filter
+        id: changed
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            api:
+            api-gateway:
               - 'services/api-gateway/**'
-            auth:
+            auth-service:
               - 'services/auth-service/**'
-            cart:
+            cart-service:
               - 'services/cart-service/**'
-            delivery:
+            delivery-service:
               - 'services/delivery-service/**'
-            noti:
+            notification-service:
               - 'services/notification-service/**'
-            order:
+            order-service:
               - 'services/order-service/**'
-            payment:
+            payment-service:
               - 'services/payment-service/**'
-            restaurant:
+            restaurant-service:
               - 'services/restaurant-service/**'
-            review:
+            review-service:
               - 'services/review-service/**'
-            user:
+            user-service:
               - 'services/user-service/**'
 
-  build-api:
+  build-services:
     needs: detect-changes
-    if: needs.detect-changes.outputs.api == 'true'
     runs-on: ubuntu-latest
+    if: needs.detect-changes.outputs.changed != '[]'
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.changed) }}
     env:
       GIT_TAG: ${{ github.ref_name }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@v3
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - uses: docker/build-push-action@v5
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
         with:
-          context: ./services/api-gateway
-          file: ./services/api-gateway/Dockerfile
+          context: ./services/${{ matrix.service }}
+          file: ./services/${{ matrix.service }}/Dockerfile
           push: true
-          tags: harukiraito/api-gateway:${{env.GIT_TAG}}
-
-  build-auth:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.auth == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/auth-service
-          file: ./services/auth-service/Dockerfile
-          push: true
-          tags: harukiraito/auth-service:${{env.GIT_TAG}}
-
-  build-cart:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.cart == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/cart-service
-          file: ./services/cart-service/Dockerfile
-          push: true
-          tags: harukiraito/cart-service:${{env.GIT_TAG}}
-
-  build-delivery:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.delivery == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/delivery-service
-          file: ./services/delivery-service/Dockerfile
-          push: true
-          tags: harukiraito/delivery-service:${{env.GIT_TAG}}
-
-  build-noti:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.noti == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/notification-service
-          file: ./services/notification-service/Dockerfile
-          push: true
-          tags: harukiraito/notification-service:${{env.GIT_TAG}}
-
-  build-order:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.order == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/order-service
-          file: ./services/order-service/Dockerfile
-          push: true
-          tags: harukiraito/order-service:${{env.GIT_TAG}}
-
-  build-payment:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.payment == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/payment-service
-          file: ./services/payment-service/Dockerfile
-          push: true
-          tags: harukiraito/payment-service:${{env.GIT_TAG}}
-
-  build-restaurant:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.restaurant == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/restaurant-service
-          file: ./services/restaurant-service/Dockerfile
-          push: true
-          tags: harukiraito/restaurant-service:${{env.GIT_TAG}}
-
-  build-review:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.review == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/review-service
-          file: ./services/review-service/Dockerfile
-          push: true
-          tags: harukiraito/review-service:${{env.GIT_TAG}}
-
-  build-user:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.user == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GIT_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./services/user-service
-          file: ./services/user-service/Dockerfile
-          push: true
-          tags: harukiraito/user-service:${{env.GIT_TAG}}
+          tags: harukiraito/${{ matrix.service }}:${{ env.GIT_TAG }}
