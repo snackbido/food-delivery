@@ -4,7 +4,7 @@ pipeline {
   environment {
     REGISTRY = 'docker.io/harukiraito'
     CREDS = credentials('dockerhub-credentials')
-    TAG = ''
+    TAG = 'latest' // Mặc định là 'latest', có thể thay đổi nếu cần
   }
 
   stages {
