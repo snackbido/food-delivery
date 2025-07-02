@@ -3,7 +3,7 @@ pipeline {
 
   environment {
     REGISTRY = 'docker.io/harukiraito'
-    CREDS = credentials('dockerhub-creds')
+    CREDS = credentials('dockerhub-credentials')
     TAG = ''
   }
 
