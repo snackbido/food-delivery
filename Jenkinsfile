@@ -14,15 +14,15 @@ pipeline {
       }
     }
 
-    stage('Detect Git Tag') {
-      steps {
-        script {
-          TAG = sh(script: "git describe --tags --exact-match || echo 'latest'", returnStdout: true).trim()
-          env.TAG = TAG
-          echo "🏷️ Sử dụng tag: ${TAG}"
-        }
-      }
-    }
+    // stage('Detect Git Tag') {
+    //   steps {
+    //     script {
+    //       TAG = sh(script: "git describe --tags --exact-match || echo 'latest'", returnStdout: true).trim()
+    //       env.TAG = TAG
+    //       echo "🏷️ Sử dụng tag: ${TAG}"
+    //     }
+    //   }
+    // }
 
     stage('Build & Push (sequentially)') {
       steps {
@@ -58,8 +58,8 @@ pipeline {
 
             sh """
               echo $CREDS_PSW | docker login -u $CREDS_USR --password-stdin
-              TAG=${TAG} docker-compose -f docker-compose-${svc}.yml build
-              TAG=${TAG} docker-compose -f docker-compose-${svc}.yml push
+              TAG=${TAG} docker compose -f docker-compose-${svc}.yml build
+              TAG=${TAG} docker compose -f docker-compose-${svc}.yml push
               docker logout
             """
           }
