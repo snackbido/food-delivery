@@ -1,6 +1,7 @@
-node_modules
-dist
-Dockerfile
+/node_modules
+/dist
 .env
 *.log
 npm-debug.log
+logs
+Dockerfile
