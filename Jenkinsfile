@@ -25,6 +25,7 @@ pipeline {
           TAG = tag
           env.TAG = TAG
           echo "📌Use tag: ${TAG}"
+          echo "test"
         }
       }
     }
